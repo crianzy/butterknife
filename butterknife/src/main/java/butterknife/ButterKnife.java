@@ -10,8 +10,10 @@ import android.support.annotation.NonNull;
 import android.util.Log;
 import android.util.Property;
 import android.view.View;
+
 import butterknife.internal.Finder;
 import butterknife.internal.ViewBinder;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,13 +21,13 @@ import java.util.Map;
 /**
  * Field and method binding for Android views. Use this class to simplify finding views and
  * attaching listeners by binding them with annotations.
- * <p>
+ * <p/>
  * Finding views from your activity is as easy as:
  * <pre><code>
  * public class ExampleActivity extends Activity {
  *   {@literal @}Bind(R.id.title) EditText titleView;
  *   {@literal @}Bind(R.id.subtitle) EditText subtitleView;
- *
+ * <p/>
  *   {@literal @}Override protected void onCreate(Bundle savedInstanceState) {
  *     super.onCreate(savedInstanceState);
  *     setContentView(R.layout.example_activity);
@@ -38,7 +40,7 @@ import java.util.Map;
  * bind can be specified along with an {@linkplain #bind(Object, Activity) activity},
  * {@linkplain #bind(Object, View) view}, or
  * {@linkplain #bind(Object, android.app.Dialog) dialog}.
- * <p>
+ * <p/>
  * Group multiple views together into a {@link List} or array.
  * <pre><code>
  * {@literal @}Bind({R.id.first_name, R.id.middle_name, R.id.last_name})
@@ -50,7 +52,7 @@ import java.util.Map;
  * <li>{@link #apply(List, Setter, Object)} &ndash; Applies a setter value to each view.</li>
  * <li>{@link #apply(List, Property, Object)} &ndash; Applies a property value to each view.</li>
  * </ul>
- * <p>
+ * <p/>
  * To bind listeners to your views you can annotate your methods:
  * <pre><code>
  * {@literal @}OnClick(R.id.submit) void onSubmit() {
@@ -63,7 +65,7 @@ import java.util.Map;
  *   // React to tweet click.
  * }
  * </code></pre>
- * <p>
+ * <p/>
  * Be default, views are required to be present in the layout for both field and method bindings.
  * If a view is optional add a {@code @Nullable} annotation for fields (such as the one in the
  * <a href="http://tools.android.com/tech-docs/support-annotations">support-annotations</a> library)
@@ -77,268 +79,342 @@ import java.util.Map;
  * {@literal @}BindInt(R.integer.columns) int columns;
  * {@literal @}BindColor(R.color.error_red) int errorRed;
  * </code></pre>
+ *
+ *
+ *
+ * 主要功能的 实现 其实都依赖  Apt 生成的相关代码
+ *
+ * 这里只是调用 很多借口的方法  具体的实现 还是 apt 生成的代码里面
  */
 public final class ButterKnife {
-  private ButterKnife() {
-    throw new AssertionError("No instances.");
-  }
+	private ButterKnife() {
+		// 所有方法都是静态的 不能new 出实例对象
+		throw new AssertionError("No instances.");
+	}
 
-  /** An unbinder contract that can be bind with {@link butterknife.Unbinder}. */
-  @SuppressWarnings("unused") // Used by generated code.
-  public interface ViewUnbinder<T> {
-    void unbind();
-  }
+	/**
+	 * An unbinder contract that can be bind with {@link butterknife.Unbinder}.
+	 */
+	@SuppressWarnings("unused") // Used by generated code.
+	public interface ViewUnbinder<T> {
+		void unbind();
+	}
 
-  /** An action that can be applied to a list of views. */
-  public interface Action<T extends View> {
-    /** Apply the action on the {@code view} which is at {@code index} in the list. */
-    void apply(@NonNull T view, int index);
-  }
+	/**
+	 * An action that can be applied to a list of views.
+	 */
+	public interface Action<T extends View> {
+		/**
+		 * Apply the action on the {@code view} which is at {@code index} in the list.
+		 */
+		void apply(@NonNull T view, int index);
+	}
 
-  /** A setter that can apply a value to a list of views. */
-  public interface Setter<T extends View, V> {
-    /** Set the {@code value} on the {@code view} which is at {@code index} in the list. */
-    void set(@NonNull T view, V value, int index);
-  }
+	/**
+	 * A setter that can apply a value to a list of views.
+	 */
+	public interface Setter<T extends View, V> {
+		/**
+		 * Set the {@code value} on the {@code view} which is at {@code index} in the list.
+		 */
+		void set(@NonNull T view, V value, int index);
+	}
 
-  private static final String TAG = "ButterKnife";
-  private static boolean debug = false;
+	private static final String TAG = "ButterKnife";
+	private static boolean debug = false;
 
-  static final Map<Class<?>, ViewBinder<Object>> BINDERS = new LinkedHashMap<>();
-  static final ViewBinder<Object> NOP_VIEW_BINDER = new ViewBinder<Object>() {
-    @Override public void bind(Finder finder, Object target, Object source) { }
-  };
+	// Bang定数据缓存
+	static final Map<Class<?>, ViewBinder<Object>> BINDERS = new LinkedHashMap<>();
 
-  /** Control whether debug logging is enabled. */
-  public static void setDebug(boolean debug) {
-    ButterKnife.debug = debug;
-  }
+	// 没有Bing 的一个对象  出错时使用
+	static final ViewBinder<Object> NOP_VIEW_BINDER = new ViewBinder<Object>() {
+		@Override
+		public void bind(Finder finder, Object target, Object source) {
+		}
+	};
 
-  /**
-   * Bind annotated fields and methods in the specified {@link Activity}. The current content
-   * view is used as the view root.
-   *
-   * @param target Target activity for view binding.
-   */
-  public static void bind(@NonNull Activity target) {
-    bind(target, target, Finder.ACTIVITY);
-  }
+	/**
+	 * Control whether debug logging is enabled.
+	 */
+	public static void setDebug(boolean debug) {
+		ButterKnife.debug = debug;
+	}
 
-  /**
-   * Bind annotated fields and methods in the specified {@link View}. The view and its children
-   * are used as the view root.
-   *
-   * @param target Target view for view binding.
-   */
-  @NonNull
-  public static View bind(@NonNull View target) {
-    bind(target, target, Finder.VIEW);
-    return target;
-  }
+	/**
+	 * Bind annotated fields and methods in the specified {@link Activity}. The current content
+	 * view is used as the view root.
+	 *
+	 * @param target Target activity for view binding.
+	 */
+	public static void bind(@NonNull Activity target) {
+		bind(target, target, Finder.ACTIVITY);
+	}
 
-  /**
-   * Bind annotated fields and methods in the specified {@link Dialog}. The current content
-   * view is used as the view root.
-   *
-   * @param target Target dialog for view binding.
-   */
-  @SuppressWarnings("unused") // Public api.
-  public static void bind(@NonNull Dialog target) {
-    bind(target, target, Finder.DIALOG);
-  }
+	/**
+	 * Bind annotated fields and methods in the specified {@link View}. The view and its children
+	 * are used as the view root.
+	 *
+	 * @param target Target view for view binding.
+	 */
+	@NonNull
+	public static View bind(@NonNull View target) {
+		bind(target, target, Finder.VIEW);
+		return target;
+	}
 
-  /**
-   * Bind annotated fields and methods in the specified {@code target} using the {@code source}
-   * {@link Activity} as the view root.
-   *
-   * @param target Target class for view binding.
-   * @param source Activity on which IDs will be looked up.
-   */
-  public static void bind(@NonNull Object target, @NonNull Activity source) {
-    bind(target, source, Finder.ACTIVITY);
-  }
+	/**
+	 * Bind annotated fields and methods in the specified {@link Dialog}. The current content
+	 * view is used as the view root.
+	 *
+	 * @param target Target dialog for view binding.
+	 */
+	@SuppressWarnings("unused") // Public api.
+	public static void bind(@NonNull Dialog target) {
+		bind(target, target, Finder.DIALOG);
+	}
 
-  /**
-   * Bind annotated fields and methods in the specified {@code target} using the {@code source}
-   * {@link View} as the view root.
-   *
-   * @param target Target class for view binding.
-   * @param source View root on which IDs will be looked up.
-   */
-  @NonNull
-  public static View bind(@NonNull Object target, @NonNull View source) {
-    bind(target, source, Finder.VIEW);
-    return source;
-  }
+	/**
+	 * Bind annotated fields and methods in the specified {@code target} using the {@code source}
+	 * {@link Activity} as the view root.
+	 *
+	 * @param target Target class for view binding.
+	 * @param source Activity on which IDs will be looked up.
+	 */
+	public static void bind(@NonNull Object target, @NonNull Activity source) {
+		bind(target, source, Finder.ACTIVITY);
+	}
 
-  /**
-   * Bind annotated fields and methods in the specified {@code target} using the {@code source}
-   * {@link Dialog} as the view root.
-   *
-   * @param target Target class for view binding.
-   * @param source Dialog on which IDs will be looked up.
-   */
-  @SuppressWarnings("unused") // Public api.
-  public static void bind(@NonNull Object target, @NonNull Dialog source) {
-    bind(target, source, Finder.DIALOG);
-  }
+	/**
+	 * Bind annotated fields and methods in the specified {@code target} using the {@code source}
+	 * {@link View} as the view root.
+	 *
+	 * @param target Target class for view binding.
+	 * @param source View root on which IDs will be looked up.
+	 */
+	@NonNull
+	public static View bind(@NonNull Object target, @NonNull View source) {
+		bind(target, source, Finder.VIEW);
+		return source;
+	}
 
-  static void bind(@NonNull Object target, @NonNull Object source, @NonNull Finder finder) {
-    Class<?> targetClass = target.getClass();
-    try {
-      if (debug) Log.d(TAG, "Looking up view binder for " + targetClass.getName());
-      ViewBinder<Object> viewBinder = findViewBinderForClass(targetClass);
-      viewBinder.bind(finder, target, source);
-    } catch (Exception e) {
-      throw new RuntimeException("Unable to bind views for " + targetClass.getName(), e);
-    }
-  }
+	/**
+	 * Bind annotated fields and methods in the specified {@code target} using the {@code source}
+	 * {@link Dialog} as the view root.
+	 *
+	 * @param target Target class for view binding.
+	 * @param source Dialog on which IDs will be looked up.
+	 */
+	@SuppressWarnings("unused") // Public api.
+	public static void bind(@NonNull Object target, @NonNull Dialog source) {
+		bind(target, source, Finder.DIALOG);
+	}
 
-  @NonNull
-  private static ViewBinder<Object> findViewBinderForClass(Class<?> cls)
-      throws IllegalAccessException, InstantiationException {
-    ViewBinder<Object> viewBinder = BINDERS.get(cls);
-    if (viewBinder != null) {
-      if (debug) Log.d(TAG, "HIT: Cached in view binder map.");
-      return viewBinder;
-    }
-    String clsName = cls.getName();
-    if (clsName.startsWith("android.") || clsName.startsWith("java.")) {
-      if (debug) Log.d(TAG, "MISS: Reached framework class. Abandoning search.");
-      return NOP_VIEW_BINDER;
-    }
-    try {
-      Class<?> viewBindingClass = Class.forName(clsName + "$$ViewBinder");
-      //noinspection unchecked
-      viewBinder = (ViewBinder<Object>) viewBindingClass.newInstance();
-      if (debug) Log.d(TAG, "HIT: Loaded view binder class.");
-    } catch (ClassNotFoundException e) {
-      if (debug) Log.d(TAG, "Not found. Trying superclass " + cls.getSuperclass().getName());
-      viewBinder = findViewBinderForClass(cls.getSuperclass());
-    }
-    BINDERS.put(cls, viewBinder);
-    return viewBinder;
-  }
+	/**
+	 *
+	 * @param target 持有View 的对象
+	 * @param source 多数情况下 是 最外层的 View
+	 * @param finder 不同 类型的finder Finder.DIALOG Finder.VIEW
+	 */
+	static void bind(@NonNull Object target, @NonNull Object source, @NonNull Finder finder) {
+		Class<?> targetClass = target.getClass();
+		try {
+			if (debug) Log.d(TAG, "Looking up view binder for " + targetClass.getName());
+			// 更具 类名 去找 自动生产的 类 中的 绑定数据
+			ViewBinder<Object> viewBinder = findViewBinderForClass(targetClass);
+			// Bang定数据,  自动生成类中  会执行 相关的 findViewById 的操作
+			viewBinder.bind(finder, target, source);
+		} catch (Exception e) {
+			throw new RuntimeException("Unable to bind views for " + targetClass.getName(), e);
+		}
+	}
 
-  /** Apply the specified {@code actions} across the {@code list} of views. */
-  @SafeVarargs public static <T extends View> void apply(@NonNull List<T> list,
-      @NonNull Action<? super T>... actions) {
-    for (int i = 0, count = list.size(); i < count; i++) {
-      for (Action<? super T> action : actions) {
-        action.apply(list.get(i), i);
-      }
-    }
-  }
+	/**
+	 * 更具 Bind 的class 找到 自动生成的 对应的 类 并 实例化它
+	 * @param cls
+	 * @return
+	 * @throws IllegalAccessException
+	 * @throws InstantiationException
+	 */
+	@NonNull
+	private static ViewBinder<Object> findViewBinderForClass(Class<?> cls)
+			throws IllegalAccessException, InstantiationException {
+		// 先从缓存中 获取
+		ViewBinder<Object> viewBinder = BINDERS.get(cls);
+		if (viewBinder != null) {
+			if (debug) Log.d(TAG, "HIT: Cached in view binder map.");
+			return viewBinder;
+		}
+		String clsName = cls.getName();
+		if (clsName.startsWith("android.") || clsName.startsWith("java.")) {
+			// android 开头的包名 不符合要求  返回一个 没有Bang定数据的 东西
+			if (debug) Log.d(TAG, "MISS: Reached framework class. Abandoning search.");
+			return NOP_VIEW_BINDER;
+		}
+		try {
+			// 反射  实例
+			Class<?> viewBindingClass = Class.forName(clsName + "$$ViewBinder");
+			//noinspection unchecked
+			viewBinder = (ViewBinder<Object>) viewBindingClass.newInstance();
+			if (debug) Log.d(TAG, "HIT: Loaded view binder class.");
+		} catch (ClassNotFoundException e) {
+			if (debug) Log.d(TAG, "Not found. Trying superclass " + cls.getSuperclass().getName());
+			// 没找到 就往 父类找 ...
+			// 这循环 有点无耻啊,  出错了就像 父类 寻找... 为什么 不直接向上 父类循环呢?
+			viewBinder = findViewBinderForClass(cls.getSuperclass());
+		}
+		// 加入缓存
+		BINDERS.put(cls, viewBinder);
+		return viewBinder;
+	}
 
-  /** Apply the specified {@code actions} across the {@code array} of views. */
-  @SafeVarargs public static <T extends View> void apply(@NonNull T[] array,
-      @NonNull Action<? super T>... actions) {
-    for (int i = 0, count = array.length; i < count; i++) {
-      for (Action<? super T> action : actions) {
-        action.apply(array[i], i);
-      }
-    }
-  }
+	/**
+	 * Apply the specified {@code actions} across the {@code list} of views.
+	 */
+	@SafeVarargs
+	public static <T extends View> void apply(@NonNull List<T> list,
+											  @NonNull Action<? super T>... actions) {
+		for (int i = 0, count = list.size(); i < count; i++) {
+			for (Action<? super T> action : actions) {
+				action.apply(list.get(i), i);
+			}
+		}
+	}
 
-  /** Apply the specified {@code action} across the {@code list} of views. */
-  public static <T extends View> void apply(@NonNull List<T> list,
-      @NonNull Action<? super T> action) {
-    for (int i = 0, count = list.size(); i < count; i++) {
-      action.apply(list.get(i), i);
-    }
-  }
+	/**
+	 * Apply the specified {@code actions} across the {@code array} of views.
+	 */
+	@SafeVarargs
+	public static <T extends View> void apply(@NonNull T[] array,
+											  @NonNull Action<? super T>... actions) {
+		for (int i = 0, count = array.length; i < count; i++) {
+			for (Action<? super T> action : actions) {
+				action.apply(array[i], i);
+			}
+		}
+	}
 
-  /** Apply the specified {@code action} across the {@code array} of views. */
-  public static <T extends View> void apply(@NonNull T[] array, @NonNull Action<? super T> action) {
-    for (int i = 0, count = array.length; i < count; i++) {
-      action.apply(array[i], i);
-    }
-  }
+	/**
+	 * Apply the specified {@code action} across the {@code list} of views.
+	 */
+	public static <T extends View> void apply(@NonNull List<T> list,
+											  @NonNull Action<? super T> action) {
+		for (int i = 0, count = list.size(); i < count; i++) {
+			action.apply(list.get(i), i);
+		}
+	}
 
-  /** Apply {@code actions} to {@code view}. */
-  @SafeVarargs public static <T extends View> void apply(@NonNull T view,
-      @NonNull Action<? super T>... actions) {
-    for (Action<? super T> action : actions) {
-      action.apply(view, 0);
-    }
-  }
+	/**
+	 * Apply the specified {@code action} across the {@code array} of views.
+	 */
+	public static <T extends View> void apply(@NonNull T[] array, @NonNull Action<? super T> action) {
+		for (int i = 0, count = array.length; i < count; i++) {
+			action.apply(array[i], i);
+		}
+	}
 
-  /** Apply {@code action} to {@code view}. */
-  public static <T extends View> void apply(@NonNull T view, @NonNull Action<? super T> action) {
-    action.apply(view, 0);
-  }
+	/**
+	 * Apply {@code actions} to {@code view}.
+	 */
+	@SafeVarargs
+	public static <T extends View> void apply(@NonNull T view,
+											  @NonNull Action<? super T>... actions) {
+		for (Action<? super T> action : actions) {
+			action.apply(view, 0);
+		}
+	}
 
-  /** Set the {@code value} using the specified {@code setter} across the {@code list} of views. */
-  public static <T extends View, V> void apply(@NonNull List<T> list,
-      @NonNull Setter<? super T, V> setter, V value) {
-    for (int i = 0, count = list.size(); i < count; i++) {
-      setter.set(list.get(i), value, i);
-    }
-  }
+	/**
+	 * Apply {@code action} to {@code view}.
+	 */
+	public static <T extends View> void apply(@NonNull T view, @NonNull Action<? super T> action) {
+		action.apply(view, 0);
+	}
 
-  /** Set the {@code value} using the specified {@code setter} across the {@code array} of views. */
-  public static <T extends View, V> void apply(@NonNull T[] array,
-      @NonNull Setter<? super T, V> setter, V value) {
-    for (int i = 0, count = array.length; i < count; i++) {
-      setter.set(array[i], value, i);
-    }
-  }
+	/**
+	 * Set the {@code value} using the specified {@code setter} across the {@code list} of views.
+	 */
+	public static <T extends View, V> void apply(@NonNull List<T> list,
+												 @NonNull Setter<? super T, V> setter, V value) {
+		for (int i = 0, count = list.size(); i < count; i++) {
+			setter.set(list.get(i), value, i);
+		}
+	}
 
-  /** Set {@code value} on {@code view} using {@code setter}. */
-  public static <T extends View, V> void apply(@NonNull T view,
-      @NonNull Setter<? super T, V> setter, V value) {
-    setter.set(view, value, 0);
-  }
+	/**
+	 * Set the {@code value} using the specified {@code setter} across the {@code array} of views.
+	 */
+	public static <T extends View, V> void apply(@NonNull T[] array,
+												 @NonNull Setter<? super T, V> setter, V value) {
+		for (int i = 0, count = array.length; i < count; i++) {
+			setter.set(array[i], value, i);
+		}
+	}
 
-  /**
-   * Apply the specified {@code value} across the {@code list} of views using the {@code property}.
-   */
-  @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
-  public static <T extends View, V> void apply(@NonNull List<T> list,
-      @NonNull Property<? super T, V> setter, V value) {
-    //noinspection ForLoopReplaceableByForEach
-    for (int i = 0, count = list.size(); i < count; i++) {
-      setter.set(list.get(i), value);
-    }
-  }
+	/**
+	 * Set {@code value} on {@code view} using {@code setter}.
+	 */
+	public static <T extends View, V> void apply(@NonNull T view,
+												 @NonNull Setter<? super T, V> setter, V value) {
+		setter.set(view, value, 0);
+	}
 
-  /**
-   * Apply the specified {@code value} across the {@code array} of views using the {@code property}.
-   */
-  @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
-  public static <T extends View, V> void apply(@NonNull T[] array,
-      @NonNull Property<? super T, V> setter, V value) {
-    //noinspection ForLoopReplaceableByForEach
-    for (int i = 0, count = array.length; i < count; i++) {
-      setter.set(array[i], value);
-    }
-  }
+	/**
+	 * Apply the specified {@code value} across the {@code list} of views using the {@code property}.
+	 */
+	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
+	public static <T extends View, V> void apply(@NonNull List<T> list,
+												 @NonNull Property<? super T, V> setter, V value) {
+		//noinspection ForLoopReplaceableByForEach
+		for (int i = 0, count = list.size(); i < count; i++) {
+			setter.set(list.get(i), value);
+		}
+	}
 
-  /** Apply {@code value} to {@code view} using {@code property}. */
-  @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
-  public static <T extends View, V> void apply(@NonNull T view,
-      @NonNull Property<? super T, V> setter, V value) {
-    setter.set(view, value);
-  }
+	/**
+	 * Apply the specified {@code value} across the {@code array} of views using the {@code property}.
+	 */
+	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
+	public static <T extends View, V> void apply(@NonNull T[] array,
+												 @NonNull Property<? super T, V> setter, V value) {
+		//noinspection ForLoopReplaceableByForEach
+		for (int i = 0, count = array.length; i < count; i++) {
+			setter.set(array[i], value);
+		}
+	}
 
-  /** Simpler version of {@link View#findViewById(int)} which infers the target type. */
-  @SuppressWarnings({ "unchecked", "UnusedDeclaration" }) // Checked by runtime cast. Public API.
-  @CheckResult
-  public static <T extends View> T findById(@NonNull View view, @IdRes int id) {
-    return (T) view.findViewById(id);
-  }
+	/**
+	 * Apply {@code value} to {@code view} using {@code property}.
+	 */
+	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
+	public static <T extends View, V> void apply(@NonNull T view,
+												 @NonNull Property<? super T, V> setter, V value) {
+		setter.set(view, value);
+	}
 
-  /** Simpler version of {@link Activity#findViewById(int)} which infers the target type. */
-  @SuppressWarnings({ "unchecked", "UnusedDeclaration" }) // Checked by runtime cast. Public API.
-  @CheckResult
-  public static <T extends View> T findById(@NonNull Activity activity, @IdRes int id) {
-    return (T) activity.findViewById(id);
-  }
+	/**
+	 * Simpler version of {@link View#findViewById(int)} which infers the target type.
+	 */
+	@SuppressWarnings({"unchecked", "UnusedDeclaration"}) // Checked by runtime cast. Public API.
+	@CheckResult
+	public static <T extends View> T findById(@NonNull View view, @IdRes int id) {
+		return (T) view.findViewById(id);
+	}
 
-  /** Simpler version of {@link Dialog#findViewById(int)} which infers the target type. */
-  @SuppressWarnings({ "unchecked", "UnusedDeclaration" }) // Checked by runtime cast. Public API.
-  @CheckResult
-  public static <T extends View> T findById(@NonNull Dialog dialog, @IdRes int id) {
-    return (T) dialog.findViewById(id);
-  }
+	/**
+	 * Simpler version of {@link Activity#findViewById(int)} which infers the target type.
+	 */
+	@SuppressWarnings({"unchecked", "UnusedDeclaration"}) // Checked by runtime cast. Public API.
+	@CheckResult
+	public static <T extends View> T findById(@NonNull Activity activity, @IdRes int id) {
+		return (T) activity.findViewById(id);
+	}
+
+	/**
+	 * Simpler version of {@link Dialog#findViewById(int)} which infers the target type.
+	 */
+	@SuppressWarnings({"unchecked", "UnusedDeclaration"}) // Checked by runtime cast. Public API.
+	@CheckResult
+	public static <T extends View> T findById(@NonNull Dialog dialog, @IdRes int id) {
+		return (T) dialog.findViewById(id);
+	}
 }

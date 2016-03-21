@@ -35,7 +35,7 @@ import static java.lang.annotation.RetentionPolicy.CLASS;
         parameters = "android.view.View"
     )
 )
-public @interface OnClick {
+public @interface  OnClick {
   /** View IDs to which the method will be bound. */
   @IdRes int[] value() default { View.NO_ID };
 }

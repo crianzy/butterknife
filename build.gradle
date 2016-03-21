@@ -3,6 +3,8 @@ subprojects { project ->
   version = VERSION_NAME
 
   repositories {
+      maven { url 'http://maven.oschina.net/content/groups/public/' }
+      jcenter()
     mavenCentral()
   }
 
@@ -26,6 +28,8 @@ subprojects { project ->
 
   buildscript {
     repositories {
+        maven { url 'http://maven.oschina.net/content/groups/public/' }
+        jcenter()
       mavenCentral()
     }
     dependencies {
@@ -36,7 +40,7 @@ subprojects { project ->
 }
 
 ext {
-  minSdkVersion = 8
+  minSdkVersion = 15
   targetSdkVersion = 23
   compileSdkVersion = 23
   buildToolsVersion = '23.0.1'
@@ -46,11 +50,13 @@ ext {
 
 ext.deps = [
     // Android
-    android: 'com.google.android:android:2.1.2',
+        // 这里是由于 我本地 有 4.1.1 的库 所以改成这样 , 就不需要 再去下一遍了
+//    android: 'com.google.android:android:2.1.2',
+    android: 'com.google.android:android:4.1.1.4',
     supportv4: 'com.android.support:support-v4:23.0.1',
     supportAnnotations: 'com.android.support:support-annotations:23.0.1',
 
-    // Square
+    // Square 这是一个 用于生产.java文件的工具类 apt 的时候用到
     javapoet: 'com.squareup:javapoet:1.4.0',
 
     // Test dependencies

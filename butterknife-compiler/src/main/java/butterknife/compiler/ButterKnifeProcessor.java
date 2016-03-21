@@ -68,6 +68,11 @@ import static javax.lang.model.element.Modifier.PRIVATE;
 import static javax.lang.model.element.Modifier.STATIC;
 import static javax.tools.Diagnostic.Kind.ERROR;
 
+/**
+ * 生成代码的 入口类
+ *
+ * 解析注解 生成相应的代码
+ */
 @AutoService(Processor.class)
 public final class ButterKnifeProcessor extends AbstractProcessor {
   static final int NO_ID = -1;
